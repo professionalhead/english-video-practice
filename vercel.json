@@ -1,12 +1,6 @@
 {
   "version": 2,
-  "builds": [
-    { "src": "package.json", "use": "@vercel/next" }
-  ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/$1" }
-  ],
+  "framework": "nextjs",
   "env": {
     "NODE_OPTIONS": "--max-old-space-size=4608"
   }
