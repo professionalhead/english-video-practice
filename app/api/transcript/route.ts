@@ -1,6 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { YoutubeTranscript } from 'youtube-transcript';
 
+const PROVIDER_NAME = 'youtube-transcript';
+const IS_PRODUCTION = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
+
+function classifyError(message: string): string {
+  const msg = message.toLowerCase();
+  if (msg.includes('requested language') || msg.includes('language not available') || msg.includes('no transcript') || msg.includes('not available')) {
+    return 'LANGUAGE_UNAVAILABLE';
+  }
+  if (msg.includes('transcript disabled') || msg.includes('captions are disabled') || msg.includes('no captions')) {
+    return 'NO_CAPTIONS';
+  }
+  if (msg.includes('blocked') || msg.includes('429') || msg.includes('too many requests') || msg.includes('rate limit') || msg.includes('ip blocked')) {
+    return 'IP_BLOCKED';
+  }
+  if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout') || msg.includes('econnreset') || msg.includes('eai_again')) {
+    return 'REQUEST_BLOCKED';
+  }
+  return 'TRANSCRIPT_PROVIDER_ERROR';
+}
+
+type FetchError = {
+  attempt: string;
+  message: string;
+  errorCode?: string;
+  provider?: string;
+  environment?: string;
+  videoId?: string;
+  requestedLanguage?: string;
+};
+
 type RawTranscriptItem = {
   text?: unknown;
   offset?: unknown;
@@ -305,7 +335,13 @@ function buildLanguageAttempts(lang: string): string[] {
   return dedupeList(attempts);
 }
 
-async function tryFetchTranscript(videoId: string, lang: string) {
+async function tryFetchTranscript(videoId: string, lang: string): Promise<{
+    transcript: NormalizedTranscriptItem[];
+    sourceLanguage: string | null;
+    requestedLanguage: string;
+    attemptsTried: string[];
+    errors: FetchError[];
+}> {
   const languageAttempts = buildLanguageAttempts(lang);
 
   const attempts: Array<{
@@ -325,7 +361,7 @@ async function tryFetchTranscript(videoId: string, lang: string) {
     };
   });
 
-  const errors: Array<{ attempt: string; message: string }> = [];
+  const errors: FetchError[] = [];
 
   for (const attempt of attempts) {
     try {
@@ -347,9 +383,16 @@ async function tryFetchTranscript(videoId: string, lang: string) {
         message: 'No transcript data returned',
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      const errorCode = classifyError(message);
       errors.push({
         attempt: attempt.label,
-        message: error instanceof Error ? error.message : 'Unknown error',
+        message,
+        errorCode,
+        provider: PROVIDER_NAME,
+        environment: IS_PRODUCTION ? 'production' : 'local',
+        videoId,
+        requestedLanguage: lang,
       });
     }
   }
@@ -385,6 +428,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         {
           error: 'Transcript not available',
+          errorCode: 'LANGUAGE_UNAVAILABLE',
           message: `No transcript could be fetched for requested language: ${lang}`,
           requestedLanguage: lang,
           attemptsTried: result.attemptsTried,
@@ -408,15 +452,21 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const errorCode = classifyError(message);
     console.error('Transcript fetch failed', {
       videoId,
       requestedLanguage: lang,
-      message: error instanceof Error ? error.message : 'Unknown error',
+      message,
+      errorCode,
+      provider: PROVIDER_NAME,
+      environment: IS_PRODUCTION ? 'production' : 'local',
     });
 
     return NextResponse.json(
       {
         error: 'Transcript not available',
+        errorCode,
         message: 'Failed to fetch transcript',
         requestedLanguage: lang,
       },
