@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import VideoPlayer from '@/components/VideoPlayer';
-import Image from 'next/image';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 type Video = {
   id: string;
@@ -21,16 +20,17 @@ type SearchResponse = {
 export default function Home() {
   const [query, setQuery] = useState('English practice');
   const [results, setResults] = useState<Video[]>([]);
-  const [selected, setSelected] = useState<Video | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const search = async (q: string) => {
     setLoading(true);
     setError(null);
+
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
       const data: SearchResponse = await res.json();
+
       if (data.error) {
         setError(data.upstreamMessage || data.error);
         setResults([]);
@@ -47,24 +47,23 @@ export default function Home() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    search(query.trim());
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    void search(trimmed);
   };
 
   useEffect(() => {
-    search(query);
+    void search(query);
   }, []);
 
-  const selectVideo = (video: Video) => {
-    setSelected(video);
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 p-4 md:p-8">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-gray-50 p-4 text-gray-900 md:p-8">
+      <div className="mx-auto max-w-5xl">
         <header className="mb-6">
-          <h1 className="text-3xl md:text-4xl font-bold">English Video Practice</h1>
+          <h1 className="text-3xl font-bold md:text-4xl">English Video Practice</h1>
           <p className="mt-2 text-lg text-gray-600">
-            Search a YouTube video, listen, read subtitles, and practise English.
+            Search a YouTube video, then open a dedicated study page to watch,
+            read subtitles, and practise English.
           </p>
         </header>
 
@@ -74,55 +73,62 @@ export default function Home() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Enter search keywords…"
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             disabled={loading}
           />
           <button
             type="submit"
             disabled={loading}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-lg bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? 'Searching…' : 'Search'}
           </button>
         </form>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-100 text-red-800 rounded-lg" role="alert">
+          <div className="mb-4 rounded-lg bg-red-100 p-3 text-red-800" role="alert">
             {error}
           </div>
         )}
 
         {results.length === 0 && !loading && (
-          <p className="text-center text-gray-600">No videos found. Try another search.</p>
+          <p className="text-center text-gray-600">
+            No videos found. Try another search.
+          </p>
         )}
 
         <section className="mb-8">
-          <h2 className="mb-4 text-xl font-semibold">Results</h2>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold">Results</h2>
+            <span className="text-sm text-gray-500">
+              {loading ? 'Searching…' : `${results.length} result(s)`}
+            </span>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {results.map((video) => (
-              <article
+              <Link
                 key={video.id}
-                onClick={() => selectVideo(video)}
-                className="cursor-pointer bg-white rounded-lg shadow hover:shadow-lg transition p-3"
+                href={`/watch/${video.id}`}
+                className="block rounded-lg bg-white p-3 shadow transition hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <img
                   src={video.thumbnail}
-                  alt=""
-                  className="w-full h-40 object-cover rounded mb-2"
+                  alt={video.title}
+                  className="mb-2 h-40 w-full rounded object-cover"
+                  loading="lazy"
                 />
-                <h3 className="font-medium line-clamp-2">{video.title}</h3>
-                <p className="mt-1 text-sm text-gray-600 line-clamp-3">{video.description}</p>
-              </article>
+                <h3 className="line-clamp-2 font-medium">{video.title}</h3>
+                <p className="mt-1 line-clamp-3 text-sm text-gray-600">
+                  {video.description}
+                </p>
+                <div className="mt-3 inline-flex items-center rounded-md bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700">
+                  Open study page →
+                </div>
+              </Link>
             ))}
           </div>
         </section>
-
-        {selected && (
-          <section>
-            <h2 className="mb-2 text-xl font-semibold">Now playing: {selected.title}</h2>
-            <VideoPlayer videoId={selected.id} />
-          </section>
-        )}
       </div>
     </div>
   );
