@@ -6,11 +6,11 @@ const IS_PRODUCTION = process.env.VERCEL === '1' || process.env.NODE_ENV === 'pr
 
 function classifyError(message: string): string {
   const msg = message.toLowerCase();
-  if (msg.includes('requested language') || msg.includes('language not available') || msg.includes('no transcript') || msg.includes('not available')) {
-    return 'LANGUAGE_UNAVAILABLE';
-  }
   if (msg.includes('transcript disabled') || msg.includes('captions are disabled') || msg.includes('no captions')) {
     return 'NO_CAPTIONS';
+  }
+  if (msg.includes('requested language') || msg.includes('language not available') || msg.includes('no transcript') || msg.includes('not available')) {
+    return 'LANGUAGE_UNAVAILABLE';
   }
   if (msg.includes('blocked') || msg.includes('429') || msg.includes('too many requests') || msg.includes('rate limit') || msg.includes('ip blocked')) {
     return 'IP_BLOCKED';
@@ -428,7 +428,19 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         {
           error: 'Transcript not available',
-          errorCode: 'LANGUAGE_UNAVAILABLE',
+          errorCode: (() => {
+            const codes = result.errors
+              .map((e) => e.errorCode)
+              .filter((code): code is string => Boolean(code));
+            if (codes.length === 0) return 'TRANSCRIPT_PROVIDER_ERROR';
+            const allSame = codes.every((c) => c === codes[0]);
+            if (allSame) return codes[0];
+            if (codes.includes('IP_BLOCKED')) return 'IP_BLOCKED';
+            if (codes.includes('REQUEST_BLOCKED')) return 'REQUEST_BLOCKED';
+            if (codes.includes('NO_CAPTIONS')) return 'NO_CAPTIONS';
+            if (codes.includes('TRANSCRIPT_PROVIDER_ERROR')) return 'TRANSCRIPT_PROVIDER_ERROR';
+            return 'LANGUAGE_UNAVAILABLE';
+          })(),
           message: `No transcript could be fetched for requested language: ${lang}`,
           requestedLanguage: lang,
           attemptsTried: result.attemptsTried,
